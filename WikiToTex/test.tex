@@ -19,19 +19,24 @@
 
 % Write a list in wiki syntax and generate the itemize block
 \wikilist{
+%option2 itemindent=-0.4cm
 - Item 1
+%item a.
 -- Item 2
 -- Item 3
-- Item 4
+%item
+-- Item 4
+- Item 5
 }
 %begin wikilist
 \begin{itemize}
    \item Item 1
-   \begin{itemize}
-      \item Item 2
-      \item Item 3
+   \begin{itemize}[itemindent=-0.4cm]
+      \item[a.] Item 2
+      \item[a.] Item 3
+      \item Item 4
    \end{itemize}
-   \item Item 4
+   \item Item 5
 \end{itemize}
 %end wikilist
 

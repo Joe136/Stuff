@@ -13,12 +13,27 @@
 
 
 
+
+//---------------------------Struct ItemDef----------------------------------------//
+struct ItemDef {
+   enum Type {
+      ID_Item = 0,
+      ID_Enum = 1
+   };//end Enum
+
+   int32_t     depth;
+   Type        type[33];
+   std::string options;
+};//end Struct
+
+
+
 //---------------------------Forward Declarations----------------------------------//
 bool        addFilename        (std::list<std::string> &filenames, const std::string &name);
 std::string trim               (const std::string& str);
 bool        getLine            (std::istream &in, std::string &out);
-int32_t     getDepth           (const std::string &s);
-void        writeList          (std::list<std::string> &block, std::ostream &out);
+ItemDef     getListDepth       (const std::string &s);
+void        generateList       (std::list<std::string> &block, std::ostream &out);
 bool        renameFile         (const std::string &oldName, const std::string &newName);
 void        extendBlockComment (std::istream &in, std::ostream &out);
 void        extendBlockCommand (std::istream &in, std::ostream &out);
@@ -171,64 +186,22 @@ bool getLine (std::istream &in, std::string &out) {
 
 
 
-//---------------------------Start getDepth----------------------------------------//
-int32_t getDepth (const std::string &s) {
-   int32_t ret = 0;
+//---------------------------Start getListDepth------------------------------------//
+ItemDef getListDepth (const std::string &s) {
+   ItemDef ret = {0};
 
    for (int32_t i = 0; i < s.size (); ++i) {
-      if (s.at(i) == '-')
-         ++ret;
-      else
+      if (s.at(i) == '-') {
+         ret.type[ret.depth] = ItemDef::ID_Item;
+         ++ret.depth;
+      } else if (s.at(i) == '#') {
+         ret.type[ret.depth] = ItemDef::ID_Enum;
+         ++ret.depth;
+      } else
          break;
    }
 
    return ret;
-}//end Fct
-
-
-
-//---------------------------Start writeList---------------------------------------//
-void writeList (std::list<std::string> &block, std::ostream &out) {
-   std::string line;
-   int32_t     spaces = 3;
-   int32_t     depth  = 0;
-   char        buffer[100];
-
-   out << "%begin wikilist\n";
-
-   for (std::string &s : block) {
-      line = trim (s);
-      int32_t d = getDepth (line);
-
-      if (d == 0) {
-         out << line << "\n";
-         continue;
-      }
-
-
-      while (d > depth) {
-         memset (buffer, ' ', depth * spaces); buffer[depth * spaces] = 0;
-         out << buffer << "\\begin{itemize}\n";
-         ++depth;
-      }
-
-      while (d < depth) {
-         --depth;
-         memset (buffer, ' ', depth * spaces); buffer[depth * spaces] = 0;
-         out << buffer << "\\end{itemize}\n";
-      }
-
-      memset (buffer, ' ', depth * spaces); buffer[depth * spaces] = 0;
-      out << buffer << "\\item " << trim (line.substr (d) ) << "\n";
-   }//end for
-
-   while (0 < depth) {
-      --depth;
-      memset (buffer, ' ', depth * spaces); buffer[depth * spaces] = 0;
-      out << buffer << "\\end{itemize}\n";
-   }
-
-   out << "%end wikilist\n";
 }//end Fct
 
 
@@ -239,6 +212,80 @@ bool renameFile (const std::string &oldName, const std::string &newName) {
    return !rename (oldName.c_str (), newName.c_str () );
 }//end Fct
 #endif
+
+
+
+//---------------------------Start generateList------------------------------------//
+void generateList (std::list<std::string> &block, std::ostream &out) {
+   std::string tline;
+   int32_t     spaces = 3;
+   int32_t     depth  = 0;
+   char        buffer[100];
+   ItemDef     defaults[33];
+   std::string ItemOpt;
+
+
+   out << "%begin wikilist\n";
+
+
+   for (std::string &s : block) {
+      tline      = trim (s);
+
+      if (tline[0] == '%') {
+         if (tline.find ("%option") == 0) {
+            std::string opt = trim (tline.substr (7) );
+            char num[3] = { opt[0], opt[1], 0 };
+            if (num[0] < '0' || num[0] > '9') continue;
+            if (num[1] < '0' || num[1] > '9') num[1] = 0;
+            uint32_t n = std::stoi (num) - 1;
+            if (n < 33) defaults[n].options = trim (opt.substr (1 + (num[1] != 0) ) );
+
+         } else if (tline.find ("%item") == 0) {
+            ItemOpt = trim (tline.substr (5) );
+         }
+
+         continue;
+      }
+
+      ItemDef id = getListDepth (tline);
+
+      if (id.depth == 0) {
+         out << tline << "\n";
+         continue;
+      }
+
+
+      while (id.depth > depth) {
+         memset (buffer, ' ', depth * spaces); buffer[depth * spaces] = 0;
+         out << buffer << "\\begin{itemize}";
+         if (defaults[depth].options.size () )
+            out << "[" << defaults[depth].options << "]";
+         out << "\n";
+         ++depth;
+      }
+
+      while (id.depth < depth) {
+         --depth;
+         memset (buffer, ' ', depth * spaces); buffer[depth * spaces] = 0;
+         out << buffer << "\\end{itemize}\n";
+         ItemOpt.clear ();
+      }
+
+      memset (buffer, ' ', depth * spaces); buffer[depth * spaces] = 0;
+      out << buffer << "\\item";
+      if (ItemOpt.size () )
+         out << "[" <<  ItemOpt << "]";
+       out << " " << trim (tline.substr (id.depth) ) << "\n";
+   }//end for
+
+   while (0 < depth) {
+      --depth;
+      memset (buffer, ' ', depth * spaces); buffer[depth * spaces] = 0;
+      out << buffer << "\\end{itemize}\n";
+   }
+
+   out << "%end wikilist\n";
+}//end Fct
 
 
 
@@ -271,7 +318,7 @@ void extendBlockComment (std::istream &in, std::ostream &out) {
 
    block.pop_front ();   // Remove initialzation line
 
-   writeList (block, out);
+   generateList (block, out);
 
    if (eline.size () )
       out << eline;
@@ -316,7 +363,7 @@ void extendBlockCommand (std::istream &in, std::ostream &out) {
    block.pop_front ();   // Remove initialzation line
    block.pop_back ();    // Remove closing line
 
-   writeList (block, out);
+   generateList (block, out);
 
    if (eline.size () )
       out << eline;
