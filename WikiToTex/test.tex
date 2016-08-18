@@ -1,0 +1,43 @@
+\documentclass{article}
+
+
+\title{Test WikiToTex}
+\author{Joe136}
+\date{16. August 2016}
+
+
+% Let Latex ignore the content of \wikilist{}
+\newcommand{\wikilist}[1]{\iffalse #1 \fi}
+
+
+\begin{document}
+
+\maketitle
+
+
+\chapter{Introduction}
+
+% Write a list in wiki syntax and generate the itemize block
+\wikilist{
+- Item 1
+-- Item 2
+-- Item 3
+- Item 4
+}
+%begin wikilist
+\begin{itemize}
+   \item Item 1
+   \begin{itemize}
+      \item Item 2
+      \item Item 3
+   \end{itemize}
+   \item Item 4
+\end{itemize}
+%end wikilist
+
+
+% Recursion is possible as well: 'wikitotex -r ...'
+\input{test2}
+
+
+\end{document}
