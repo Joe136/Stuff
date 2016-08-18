@@ -24,6 +24,7 @@ struct ItemDef {
    int32_t     depth;
    Type        type[33];
    std::string options;
+   std::string item;
 };//end Struct
 
 
@@ -220,6 +221,7 @@ void generateList (std::list<std::string> &block, std::ostream &out) {
    std::string tline;
    int32_t     spaces = 3;
    int32_t     depth  = 0;
+   bool        ItemOptChanged = false;
    char        buffer[100];
    ItemDef     defaults[33];
    std::string ItemOpt;
@@ -235,13 +237,14 @@ void generateList (std::list<std::string> &block, std::ostream &out) {
          if (tline.find ("%option") == 0) {
             std::string opt = trim (tline.substr (7) );
             char num[3] = { opt[0], opt[1], 0 };
-            if (num[0] < '0' || num[0] > '9') continue;
+            if (num[0] < '0' || num[0] > '9') { num[0] = '1'; num[1] = 0; }
             if (num[1] < '0' || num[1] > '9') num[1] = 0;
             uint32_t n = std::stoi (num) - 1;
             if (n < 33) defaults[n].options = trim (opt.substr (1 + (num[1] != 0) ) );
 
          } else if (tline.find ("%item") == 0) {
             ItemOpt = trim (tline.substr (5) );
+            ItemOptChanged = true;
          }
 
          continue;
@@ -268,13 +271,18 @@ void generateList (std::list<std::string> &block, std::ostream &out) {
          --depth;
          memset (buffer, ' ', depth * spaces); buffer[depth * spaces] = 0;
          out << buffer << "\\end{itemize}\n";
-         ItemOpt.clear ();
+         defaults[depth].item.clear ();
+      }
+
+      if (ItemOptChanged) {
+         std::swap (defaults[id.depth-1].item, ItemOpt);
+         ItemOptChanged = false;
       }
 
       memset (buffer, ' ', depth * spaces); buffer[depth * spaces] = 0;
       out << buffer << "\\item";
-      if (ItemOpt.size () )
-         out << "[" <<  ItemOpt << "]";
+      if (defaults[id.depth-1].item.size () )
+         out << "[" <<  defaults[id.depth-1].item << "]";
        out << " " << trim (tline.substr (id.depth) ) << "\n";
    }//end for
 
