@@ -304,7 +304,7 @@ void extendBlockComment (std::istream &in, std::ostream &out) {
       } else if (line.size () == 0) {
          break;
       } else if (line.at (0) == '%') {
-         block.push_back (line);
+         block.push_back (line.substr (1) );
       } else if (line == "%begin wikilist")
          cleanup = true;
       else {
