@@ -41,6 +41,11 @@ void        extendBlockCommand (std::istream &in, std::ostream &out);
 
 
 
+//---------------------------Static Variables--------------------------------------//
+bool s_cleanup = false;
+
+
+
 //---------------------------Start Main--------------------------------------------//
 int main (int argc, char *argv[]) {
    if (argc < 2) {
@@ -76,6 +81,9 @@ int main (int argc, char *argv[]) {
       std::string arg = argv[i];
       if (arg == "-r") {   //TODO extend
          recursive = true;
+         continue;
+      } else if (arg == "-c") {   //TODO extend
+         s_cleanup = true;
          continue;
       }
 
@@ -326,7 +334,8 @@ void extendBlockComment (std::istream &in, std::ostream &out) {
 
    block.pop_front ();   // Remove initialzation line
 
-   generateList (block, out);
+   if (!s_cleanup)
+      generateList (block, out);
 
    if (eline.size () )
       out << eline;
@@ -371,7 +380,8 @@ void extendBlockCommand (std::istream &in, std::ostream &out) {
    block.pop_front ();   // Remove initialzation line
    block.pop_back ();    // Remove closing line
 
-   generateList (block, out);
+   if (!s_cleanup)
+      generateList (block, out);
 
    if (eline.size () )
       out << eline;
