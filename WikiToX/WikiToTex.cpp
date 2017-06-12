@@ -2,15 +2,14 @@
 // Add this line to Tex: \newcommand{\wikilist}[1]{\iffalse #1 \fi}
 
 //---------------------------Includes----------------------------------------------//
-#include <stdio.h>
-#include <string>
-#include <list>
-#include <iostream>
-#include <fstream>
-#include <sstream>
+#include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <functional>
-
+#include <iostream>
+#include <list>
+#include <sstream>
+#include <string>
 
 
 
@@ -30,14 +29,18 @@ struct ItemDef {
 
 
 //---------------------------Forward Declarations----------------------------------//
-bool        addFilename        (std::list<std::string> &filenames, const std::string &name);
-std::string trim               (const std::string& str);
-bool        getLine            (std::istream &in, std::string &out);
-ItemDef     getListDepth       (const std::string &s);
-void        generateList       (std::list<std::string> &block, std::ostream &out);
-bool        renameFile         (const std::string &oldName, const std::string &newName);
-void        extendBlockComment (std::istream &in, std::ostream &out);
-void        extendBlockCommand (std::istream &in, std::ostream &out);
+bool        addFilename          (std::list<std::string> &filenames, const std::string &name);
+std::string trim                 (const std::string& str);
+bool        getLine              (std::istream &in, std::string &out);
+ItemDef     getListDepth         (const std::string &s);
+void        generateListTex      (std::list<std::string> &block, std::ostream &out);
+void        generateListGraphViz (std::list<std::string> &block, std::ostream &out);
+void        extendBlock          (std::istream &in, std::ostream &out);
+void        extendBlockComment   (std::istream &in, std::ostream &out);
+void        extendBlockCommand   (std::istream &in, std::ostream &out);
+#ifdef __linux__
+bool renameFile (const std::string &oldName, const std::string &newName);
+#endif
 
 
 
@@ -49,7 +52,7 @@ bool s_cleanup = false;
 //---------------------------Start Main--------------------------------------------//
 int main (int argc, char *argv[]) {
    if (argc < 2) {
-      printf ("WikiToTex <file> [<file> ...]\n");
+      printf ("WikiToTex [-r] [-c] <file> [<file> ...]\n");
       return 0;
    }
 
@@ -129,7 +132,7 @@ int main (int argc, char *argv[]) {
 
          out << outS.substr (0, outS.size () - 1);
       }
-   }
+   }//end for
 
    return 0;
 }//end Main
@@ -215,7 +218,7 @@ ItemDef getListDepth (const std::string &s) {
 
 
 
-//---------------------------Start extendBlockComment------------------------------//
+//---------------------------Start renameFile--------------------------------------//
 #ifdef __linux__
 bool renameFile (const std::string &oldName, const std::string &newName) {
    return !rename (oldName.c_str (), newName.c_str () );
@@ -224,8 +227,90 @@ bool renameFile (const std::string &oldName, const std::string &newName) {
 
 
 
-//---------------------------Start generateList------------------------------------//
-void generateList (std::list<std::string> &block, std::ostream &out) {
+//---------------------------Start generateListTex---------------------------------//
+void generateListTex (std::list<std::string> &block, std::ostream &out) {
+   std::string tline;
+   int32_t     spaces = 3;
+   int32_t     depth  = 0;
+   bool        ItemOptChanged = false;
+   char        buffer[100];
+   ItemDef     defaults[33];
+   std::string ItemOpt;
+
+
+   out << "%begin wikilist\n";
+
+
+   for (std::string &s : block) {
+      tline      = trim (s);
+
+      if (tline[0] == '%') {
+         if (tline.find ("%option") == 0) {
+            std::string opt = trim (tline.substr (7) );
+            char num[3] = { opt[0], opt[1], 0 };
+            if (num[0] < '0' || num[0] > '9') { num[0] = '1'; num[1] = 0; }
+            if (num[1] < '0' || num[1] > '9') num[1] = 0;
+            uint32_t n = std::stoi (num) - 1;
+            if (n < 33) defaults[n].options = trim (opt.substr (1 + (num[1] != 0) ) );
+
+         } else if (tline.find ("%item") == 0) {
+            ItemOpt = trim (tline.substr (5) );
+            ItemOptChanged = true;
+         }
+
+         continue;
+      }
+
+      ItemDef id = getListDepth (tline);
+
+      if (id.depth == 0) {
+         out << tline << "\n";
+         continue;
+      }
+
+
+      while (id.depth > depth) {
+         memset (buffer, ' ', depth * spaces); buffer[depth * spaces] = 0;
+         out << buffer << "\\begin{itemize}";
+         if (defaults[depth].options.size () )
+            out << "[" << defaults[depth].options << "]";
+         out << "\n";
+         ++depth;
+      }
+
+      while (id.depth < depth) {
+         --depth;
+         memset (buffer, ' ', depth * spaces); buffer[depth * spaces] = 0;
+         out << buffer << "\\end{itemize}\n";
+         defaults[depth].item.clear ();
+      }
+
+      if (ItemOptChanged) {
+         std::swap (defaults[id.depth-1].item, ItemOpt);
+         ItemOptChanged = false;
+      }
+
+      memset (buffer, ' ', depth * spaces); buffer[depth * spaces] = 0;
+      out << buffer << "\\item";
+      if (defaults[id.depth-1].item.size () )
+         out << "[" <<  defaults[id.depth-1].item << "]";
+       out << " " << trim (tline.substr (id.depth) ) << "\n";
+   }//end for
+
+   while (0 < depth) {
+      --depth;
+      memset (buffer, ' ', depth * spaces); buffer[depth * spaces] = 0;
+      out << buffer << "\\end{itemize}\n";
+   }
+
+   out << "%end wikilist\n";
+}//end Fct
+
+
+
+//---------------------------Start generateListGraphViz----------------------------//
+//TODO implement this
+void generateListGraphViz (std::list<std::string> &block, std::ostream &out) {
    std::string tline;
    int32_t     spaces = 3;
    int32_t     depth  = 0;
@@ -310,7 +395,7 @@ void extendBlockComment (std::istream &in, std::ostream &out) {
    std::string line;
    std::string eline;
    std::list<std::string> block;
-   block.push_back ("%!wikilist");
+   block.push_back ("!wikilist");
    bool cleanup = false;
 
    while (getLine (in, line) ) {
@@ -330,12 +415,12 @@ void extendBlockComment (std::istream &in, std::ostream &out) {
    }//end while
 
    for (std::string &s : block)
-      out << s << "\n";
+      out << "%" << s << "\n";
 
    block.pop_front ();   // Remove initialzation line
 
    if (!s_cleanup)
-      generateList (block, out);
+      generateListTex (block, out);
 
    if (eline.size () )
       out << eline;
@@ -381,7 +466,7 @@ void extendBlockCommand (std::istream &in, std::ostream &out) {
    block.pop_back ();    // Remove closing line
 
    if (!s_cleanup)
-      generateList (block, out);
+      generateListTex (block, out);
 
    if (eline.size () )
       out << eline;

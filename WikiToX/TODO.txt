@@ -1,0 +1,4 @@
+- compare processing result with base before saving
+-- prevent saving unchanged file
+-- first compare size, then content
+- detect '\r'

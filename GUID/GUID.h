@@ -6,10 +6,10 @@
 #pragma once
 
 //---------------------------Includes----------------------------------------------//
-#include <stdlib.h>
 #include <cstdint>
+#include <ctime>
+#include <stdlib.h>
 #include <string>
-#include <time.h>
 
 
 
@@ -30,7 +30,7 @@ public:// Constructors
       if (s == "new")
          generate ();
       else
-         sscanf (s.c_str (), "%02hhX%02hhX%02hhX%02hhX-%02hhX%02hhX-%02hhX%02hhX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX",
+         sscanf (s.c_str (), s_pGUIDformat,
                        &guid.c[0], &guid.c[1], &guid.c[2],  &guid.c[3],  &guid.c[4],  &guid.c[5],  &guid.c[6],  &guid.c[7],
                        &guid.c[8], &guid.c[9], &guid.c[10], &guid.c[11], &guid.c[12], &guid.c[13], &guid.c[14], &guid.c[15]);
    }//end Constructor
@@ -38,16 +38,20 @@ public:// Constructors
 
 public:// Functions
    void generate () {
-      srand (time (nullptr) );
       for (int8_t i = 0; i < 8; ++i)
          guid.s[i] = rand () % 65536;
    }//end Fct
 
 
+   std::string str () const {
+      return operator std::string ();
+   }//end Fct
+
+
 public:// Operators
-   operator std::string () {
+   operator std::string () const {
       char s[37];
-      snprintf (s, 37, "%02hhX%02hhX%02hhX%02hhX-%02hhX%02hhX-%02hhX%02hhX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX",
+      snprintf (s, 37, s_pGUIDformat,
                        guid.c[0], guid.c[1], guid.c[2],  guid.c[3],  guid.c[4],  guid.c[5],  guid.c[6],  guid.c[7],
                        guid.c[8], guid.c[9], guid.c[10], guid.c[11], guid.c[12], guid.c[13], guid.c[14], guid.c[15]);
       return std::string (s);
@@ -66,24 +70,28 @@ public:// Operators
    }//end Fct
 
    bool operator< (const GUID &other) const noexcept {
-      return (guid.c[0]  < other.guid.c[0]  &&
-              guid.c[1]  < other.guid.c[1]  &&
-              guid.c[2]  < other.guid.c[2]  &&
-              guid.c[3]  < other.guid.c[3]  &&
-              guid.c[4]  < other.guid.c[4]  &&
-              guid.c[5]  < other.guid.c[5]  &&
-              guid.c[6]  < other.guid.c[6]  &&
-              guid.c[7]  < other.guid.c[7]  &&
-              guid.c[8]  < other.guid.c[8]  &&
-              guid.c[9]  < other.guid.c[9]  &&
-              guid.c[10] < other.guid.c[10] &&
-              guid.c[11] < other.guid.c[11] &&
-              guid.c[12] < other.guid.c[12] &&
-              guid.c[13] < other.guid.c[13] &&
-              guid.c[14] < other.guid.c[14] &&
-              guid.c[15] < other.guid.c[15]);
+      // Search for the first different pair, then check if smaller
+      for (int8_t i = 0; i < 16; ++i) {
+         if (guid.c[i] == other.guid.c[i]) continue;
+         return (guid.c[i] < other.guid.c[i]);
+      }//end for
+
+      return false;   // All paira are identical
    }//end Fct
 
+   bool operator> (const GUID &other) const noexcept {
+      // Search for the first different pair, then check if bigger
+      for (int8_t i = 0; i < 16; ++i) {
+         if (guid.c[i] == other.guid.c[i]) continue;
+         return (guid.c[i] > other.guid.c[i]);
+      }//end for
+
+      return false;   // All paira are identical
+   }//end Fct
+
+
+protected:// Variables
+   static const constexpr char *s_pGUIDformat = "%02hhX%02hhX%02hhX%02hhX-%02hhX%02hhX-%02hhX%02hhX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX";
 
 public:// Variables
    union {
@@ -100,5 +108,7 @@ public:// Variables
 
 
 
-//---------------------------Forward Declarations----------------------------------//
-std::string operator+ (std::string s, utils::GUID guid);
+//---------------------------Start Operators---------------------------------------//
+std::string operator+ (std::string s, utils::GUID guid) {
+   return s + (std::string)guid;
+}//end Fct
