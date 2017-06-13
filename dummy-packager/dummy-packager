@@ -1,0 +1,48 @@
+#!/bin/bash
+
+depends=true
+conflicts=true
+breaks=true
+
+
+for pkg in $@; do
+   if [[ "$pkg" =~ ^-- ]]; then
+      case $pkg in
+      --depends)      depends=true    ;;
+      --conflicts)    conflicts=true  ;;
+      --breaks)       breaks=true     ;;
+      --no-depends)   depends=false   ;;
+      --no-conflicts) conflicts=false ;;
+      --no-breaks)    breaks=false    ;;
+      esac
+      continue
+   fi
+
+   if [[ "$pkg" =~ = ]]; then
+      pkgname="$(echo "$pkg" | awk '{split($0,a,"="); print a[1]}')"
+      version="$(echo "$pkg" | awk '{split($0,a,"="); print a[2]}')"
+      options=""
+   else
+      pkgname="$pkg"
+      version=""
+      options="--no-all-versions"
+   fi
+
+   #file="$(echo "$pkgname" | awk '{split($0,a,":"); print a[1]}')"
+   file="$(mktemp)"
+
+   apt-cache show $options "$pkg" > "$file"
+
+   if [ $? == 0 ]; then
+      #[[ $depends   == false ]] && sed -i -re '/^Depends:/,/^[^ ]/!b;{/^(Depends:| )/d}' "$file"
+      [[ $depends   == false ]] && sed -i -re '/^ ?Depends:/d'   "$file"
+      [[ $conflicts == false ]] && sed -i -re '/^ ?Conflicts:/d' "$file"
+      [[ $breaks    == false ]] && sed -i -re '/^ ?Breaks:/d'    "$file"
+
+      equivs-build "$file"
+   else
+      echo "error: cannot create Package: '$pkg'" >&2
+   fi
+
+   rm "$file"
+done
