@@ -1,5 +1,6 @@
 
 //---------------------------Includes----------------------------------------------//
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -7,6 +8,7 @@
 #include <functional>
 #include <iostream>
 #include <list>
+#include <map>
 #include <sstream>
 #include <string>
 #include <sys/wait.h>
@@ -15,15 +17,23 @@
 
 
 
+//---------------------------Defines-----------------------------------------------//
+#define _S std::string()+
+;
+
+
+
 //---------------------------Struct Node-------------------------------------------//
 struct Node {
-   std::string  value;
-   std::string  opts;
-   Node        *next  = nullptr;
-   Node        *child = nullptr;
+   std::string                        value;
+   std::map<std::string,std::string>  opts;
+   Node                              *next  = nullptr;
+   Node                              *child = nullptr;
+
    Node () {}
    Node (const std::string &s) : value (s) {}
-   Node (const std::string &s, const std::string &o) : value (s), opts (o) {}
+   Node (const std::string &s, const std::map<std::string,std::string> &o) : value (s), opts (o) {}
+
    ~Node () {
       if (next)  delete next;
       if (child) delete child;
@@ -57,10 +67,11 @@ bool        addFilename          (std::list<std::string> &filenames, const std::
 std::string trim                 (const std::string& str);
 bool        getLine              (std::istream &in, std::string &out);
 ItemDef     getListDepth         (const std::string &s);
-void        generateListGraphViz (Node *root, std::ostream &out);
 bool        renameFile           (const std::string &oldName, const std::string &newName);
-void        extendBlock          (std::istream &in, std::ostream &out);
-void        extendBlockRecursive (LinesList::iterator &it, const LinesList::iterator &end, Node *root, int32_t depth);
+bool        extendBlock          (std::istream &in, std::ostream &out);
+void        extendBlockRecursive (LinesList::iterator &it, const LinesList::iterator &end, Node *root, int32_t depth, Node *top);
+void        generateListGraphViz (Node *root, std::ostream &out);
+Node        processLine          (const std::string &line);
 std::vector<std::string> split   (const std::string &str, const std::string &delim);
 std::string split (const std::string &str, const std::string &delim, const int32_t num);
 
@@ -85,6 +96,7 @@ int main (int argc, char *argv[]) {
 
    for (int32_t i = 1; i < argc; ++i) {
       std::string arg = argv[i];
+
       if (arg == "-r") {   //TODO extend
          recursive = true;
          continue;
@@ -240,12 +252,120 @@ bool renameFile (const std::string &oldName, const std::string &newName) {
 
 
 
+//---------------------------Start extendBlock-------------------------------------//
+bool extendBlock (std::istream &in, std::ostream &out) {
+   Node        root;
+   std::string line;
+   LinesList   allLines;
+
+   while (getLine (in, line) ) {
+      std::string tline = trim (line);
+      if (!tline.empty () )
+         allLines.push_back (tline);
+   }//end while
+
+   LinesList::iterator it = allLines.begin ();
+
+   if (it == allLines.end () ) return false;
+
+
+   // Search first non-comment line
+   for (; it != allLines.end (); ++it)
+      if (it->at (0) != '%')
+         break;
+
+
+   root.value         = *it;   // Header
+   root.opts["title"] = *it;
+
+
+   LinesList::iterator itComment = allLines.begin ();
+   while (itComment != it) {
+      std::string tline = trim (*itComment);
+      size_t pos = tline.find (":");
+      std::string key   = trim (tline.substr (1, pos - 1) );
+      std::string value = trim (tline.substr (pos + 1) );
+      root.opts[key]    = value;
+      ++itComment;
+   }//end while
+
+
+   extendBlockRecursive (++it, allLines.end (), &root, 1, &root);
+
+   generateListGraphViz (&root, out);
+}//end Fct
+
+
+
+//---------------------------Start extendBlockRecursive----------------------------//
+void extendBlockRecursive (LinesList::iterator &it, const LinesList::iterator &end, Node *root, int32_t depth, Node *top) {
+   Node *current = root->child = new Node ();
+
+   while (it != end) {
+      if (it->at (0) == '%') {
+         ++it;
+         continue;
+      }
+
+      ItemDef def = getListDepth (*it);
+
+      if (def.depth > depth) {
+         extendBlockRecursive (it, end, current, depth + 1, top);
+         //++it;
+      } else if (def.depth < depth) {
+         return;
+      } else {
+         std::map<std::string,std::string> gvOpts;
+
+         if (it->find ("###") != std::string::npos) {
+            std::vector<std::string> opts = split (it->substr (it->find ("###") + 3), ",");
+            for (std::string &o : opts) {
+               size_t pos = o.find (":");
+               size_t temp5 = 0, temp6 = 0;
+               std::string key   = trim (o.substr (0, pos) );
+               std::string value = trim (o.substr (pos + 1) );
+               std::transform (key.begin(), key.end(), key.begin(), ::tolower);   // Convert key to lower case
+
+               while ( (temp6 = value.find ("$1", temp5) ) != -1) {   // Replace $1 by key
+                  std::string s = trim (trim (it->substr (0, it->find ("###") ) ).substr (depth) );
+                  value = value.substr (0, temp6) + s + value.substr (temp6 + 2);
+                  temp5 = temp6;
+               }//end while
+
+               if (value[0] == '<' && value[value.size()-1] == '>')
+                  gvOpts[key] = value;
+               else
+                  gvOpts[key] = _S"\"" + value + "\"";
+
+               if (key == "url")
+                  gvOpts["target"] = "\"_blank\"";
+            }//end for
+
+            *it = trim (it->substr (0, it->find ("###") ) );
+         }
+
+         current = current->next = new Node (trim (it->substr (depth) ), gvOpts);
+         ++it;
+      }
+   }//end for
+}//end Fct
+
+
+
 //---------------------------Start generateListGraphViz----------------------------//
 //TODO implement this
 void generateListGraphViz (Node *root, std::ostream &out) {
-   out << "digraph \"C6_Methods\" {\n"
-       << "graph [root=\"" + root->value + "\",layout=neato,epsilon=0.005,overlap=false]\n"
-       << "\"" + root->value + "\" [color=red]\n";
+   out << "digraph \"" << root->opts["title"] << "\" {\n"
+       << "graph [root=\"" + root->value + "\",layout=neato,epsilon=0.005,overlap=false," << root->opts["graph"] << "]\n";
+
+
+   out << "\"" + root->value + "\" [color=red";
+   root->opts.erase ("title");
+   root->opts.erase ("graph");
+   for (auto p : root->opts)
+      out << "," << p.first << "=" << p.second;
+   out << "]\n";
+
 
    std::function<void(Node*)> recursive = [&](Node *root) {
       if (!root) return;
@@ -253,8 +373,12 @@ void generateListGraphViz (Node *root, std::ostream &out) {
       if (!current) return;
 
       for (Node *child = current->next; child != nullptr; child = child->next) {
-         if (child->opts.size () )
-            out << "\"" + child->value + "\" [" << child->opts << "]\n";
+         if (child->opts.size () ) {
+            out << "\"" + child->value + "\" [";
+            for (auto p : child->opts)
+               out << p.first << "=" << p.second << ",";
+            out << "]\n";
+         }
       }//end for
 
       out << "\"" + root->value + "\" -> { ";
@@ -277,82 +401,42 @@ void generateListGraphViz (Node *root, std::ostream &out) {
 
 
 
-//---------------------------Start extendBlock-------------------------------------//
-void extendBlock (std::istream &in, std::ostream &out) {
-   Node        root;
-   std::string line;
-   LinesList   allLines;
+//---------------------------Start processLine-------------------------------------//
+Node processLine (const std::string &line) {
+   Node node;
 
-   while (getLine (in, line) ) {
-      std::string tline = trim (line);
-      if (!tline.empty () )
-         allLines.push_back (tline);
-   }//end while
+   size_t pos = line.find ("###");
 
-   LinesList::iterator it = allLines.begin ();
+   node.name = trim  (line.substr (0, pos) );
 
-   if (it == allLines.end () ) return;
-
-   root.value = *it;   // Header
-
-   extendBlockRecursive (++it, allLines.end (), &root, 1);
-
-   generateListGraphViz (&root, out);
-}//end Fct
+   std::vector<std::string> opts = split (line.substr (pos + 3), ",");
 
 
+   for (std::string &o : opts) {
+      size_t pos = o.find (":");
+      size_t temp5 = 0, temp6 = 0;
 
-//---------------------------Start extendBlockRecursive----------------------------//
-void extendBlockRecursive (LinesList::iterator &it, const LinesList::iterator &end, Node *root, int32_t depth) {
-   Node *current = root->child = new Node ();
+      std::string key   = trim (o.substr (0, pos) );
+      std::string value = trim (o.substr (pos + 1) );
 
-   while (it != end) {
-      if (it->at (0) == '%') { ++it; continue; }
+      std::transform (key.begin(), key.end(), key.begin(), ::tolower);   // Convert key to lower case
 
-      ItemDef def = getListDepth (*it);
+      while ( (temp6 = value.find ("$1", temp5) ) != -1) {   // Replace $1 by key
+         std::string s = trim (trim (line.substr (0, line.find ("###") ) ).substr (depth) );
+         value = value.substr (0, temp6) + s + value.substr (temp6 + 2);
+         temp5 = temp6;
+      }//end while
 
-      if (def.depth > depth) {
-         extendBlockRecursive (it, end, current, depth + 1);
-         //++it;
-      } else if (def.depth < depth) {
-         return;
-      } else {
-         std::string gvOpts = "";
+      if (value[0] == '<' && value[value.size()-1] == '>')
+         node.opts[key] = value;
+      else
+         node.opts[key] = _S"\"" + value + "\"";
 
-         if (it->find ("###") != std::string::npos) {
-            std::vector<std::string> opts = split (it->substr (it->find ("###") + 3), ",");
-            bool first = true;
-            for (std::string &o : opts) {
-               if (!first) gvOpts += ",";
-               size_t pos = o.find (":");
-               size_t temp5 = 0, temp6 = 0;
-               std::string key   = trim (o.substr (0, pos) );
-               std::string value = trim (o.substr (pos + 1) );
-
-               while ( (temp6 = value.find ("$1", temp5) ) != -1) {   // Replace $1 by key
-                  std::string s = trim (trim (it->substr (0, it->find ("###") ) ).substr (depth) );
-                  value = value.substr (0, temp6) + s + value.substr (temp6 + 2);
-                  temp5 = temp6;
-               }//end while
-
-               if (value[0] == '<' && value[value.size()-1] == '>')
-                  gvOpts += key + "=" + value;
-               else
-                  gvOpts += key + "=\"" + value + "\"";
-
-               if (key == "URL")
-                  gvOpts += ",target=\"_blank\"";
-
-               first = false;
-            }//end for
-
-            *it = trim (it->substr (0, it->find ("###") ) );
-         }
-
-         current = current->next = new Node (trim (it->substr (depth) ), gvOpts);
-         ++it;
-      }
+      if (key == "url")
+         node.opts["target"] = "\"_blank\"";
    }//end for
+
+   return node;
 }//end Fct
 
 
